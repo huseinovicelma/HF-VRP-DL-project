@@ -1,155 +1,190 @@
 import random
+import copy
+import time
+import gurobipy as gp
+from gurobipy import GRB
+from src.model import build_model, solve_model
 import time
 
-# =========================
-# Funzioni di supporto
-# =========================
+def lns_matheuristic(I, I0, S, Q, q, L, t, c, r, ITERMAX=50, MAXNOIMPROVE=10, m_remove=5, alpha=1.5, timelimit=15):
 
-def remove_arcs(solution, nodes):
-    # Rimuove tutti gli archi entranti e uscenti dai nodi in 'nodes'
-    new_arcs = set()
-    for (i, j, k) in solution['arcs']:
-        if i not in nodes and j not in nodes:
-            new_arcs.add((i, j, k))
-    return {'arcs': new_arcs, 'cost': solution['cost']}
+    start = time.time()
 
-def solve_overconstrained(data, build_model, fixed_arcs):
-    # Costruisci e risolvi il modello con alcuni archi fissati a 1
-    m = build_model(data, vi_flags={},fixed_arcs=fixed_arcs)
-    m.optimize()
-    if m.status == 2:
-        arcs = set()
-        for v in m.getVars():
-            if v.varName.startswith("X[") and v.x > 0.5:
-                # Estrai indici da varName tipo X[P1,P2,N1]
-                idx = v.varName[2:-1].split(',')
-                arcs.add(tuple(idx))
-        return {'arcs': arcs, 'cost': m.objVal}
-    else:
-        return {'arcs': set(), 'cost': float('inf')}
+    model = build_model(I, I0, S, Q, q, L, t, c, r, use_vi1=False, use_vi2=False, use_vi3=False, use_vi4=False, timelimit=15)
 
-def initial_solution(data, build_model):
-    # Soluzione iniziale: modello esatto senza archi fissati
-    m = build_model(data, vi_flags={})
-    m.optimize()
-    if m.status == 2:
-        arcs = set()
-        for v in m.getVars():
-            if v.varName.startswith("X[") and v.x > 0.5:
-                idx = v.varName[2:-1].split(',')
-                arcs.add(tuple(idx))
-        return {'arcs': arcs, 'cost': m.objVal}
-    else:
-        return {'arcs': set(), 'cost': float('inf')}
+    model_results, X, Y = solve_model(model)
 
-# =========================
-# ALGORITHM 4: Diversification DIV
-# =========================
-def diversification_DIV(solution, ports, t, rho, m_pert, build_model, data):
-    IR = set()
-    OmegaR = solution['arcs'].copy()
-    I = set(ports)
-    # Step 3-6: Randomly select m_pert ports
-    for _ in range(m_pert):
-        candidates = list(I - IR)
-        if not candidates:
+    omega_best = {}
+    for (i, j, s), var in X.items():
+        omega_best[f"X[{i},{j},{s}]"] = var.X
+    omega_best_obj = model_results['ObjVal']
+    model_results_best = model_results
+    no_improve = 0
+
+    for iter in range(ITERMAX):
+        if no_improve >= MAXNOIMPROVE:
             break
-        j = random.choice(candidates)
-        IR.add(j)
-    # Step 7-11: Add close ports
-    for i in IR.copy():
-        for j in I - IR:
-            if t[i][j] <= rho[i]:
-                IR.add(j)
-    # Step 12-14: Remove arcs entering/exiting IR from OmegaR
-    OmegaR = set([arc for arc in OmegaR if arc[0] not in IR and arc[1] not in IR])
-    # Step 15-16: Fissa archi attivi in OmegaR a 1 e risolvi modello over-constrained
-    Omega_new = solve_overconstrained(data, build_model, fixed_arcs=OmegaR)
-    return Omega_new
 
-# =========================
-# ALGORITHM 2: Intensification INT
-# =========================
-def intensification_INT(solution, ports, t, rho, m_pert, build_model, data):
-    # Simile a DIV ma scegli i porti in modo deterministico (es: quelli con costo maggiore)
-    IR = set()
-    OmegaR = solution['arcs'].copy()
-    I = set(ports)
-    # Step 3-6: Scegli i m_pert porti con grado uscente maggiore
-    port_scores = {j: sum(1 for arc in OmegaR if arc[0] == j) for j in I}
-    sorted_ports = sorted(port_scores, key=port_scores.get, reverse=True)
-    for j in sorted_ports[:m_pert]:
-        IR.add(j)
-    # Step 7-11: Add close ports
-    for i in IR.copy():
-        for j in I - IR:
-            if t[i][j] <= rho[i]:
-                IR.add(j)
-    # Step 12-14: Remove arcs entering/exiting IR from OmegaR
-    OmegaR = set([arc for arc in OmegaR if arc[0] not in IR and arc[1] not in IR])
-    Omega_new = solve_overconstrained(data, build_model, fixed_arcs=OmegaR)
-    return Omega_new
+        omega_R = omega_best.copy()
 
-# =========================
-# ALGORITHM 3: Reconstruction REC
-# =========================
-def reconstruction_REC(solution, ports, t, rho, m_pert, build_model, data):
-    # Scegli m_pert porti a caso e rimuovi solo gli archi uscenti
-    IR = set()
-    OmegaR = solution['arcs'].copy()
-    I = set(ports)
-    for _ in range(m_pert):
-        candidates = list(I - IR)
-        if not candidates:
+        I_R = set(random.sample(I, m_remove))
+
+
+        for i in list(I_R):
+            nu_i = min(t[i][j] for j in I if j != i)
+            rho_i = alpha * nu_i
+            for j in I:
+                if j not in I_R and t[i][j] <= rho_i:
+                    I_R.add(j)
+
+        model_rebuild = build_model(I, I0, S, Q, q, L, t, c, r,
+                                    use_vi1=False, use_vi2=False, use_vi3=False, use_vi4=False,
+                                    timelimit=timelimit)
+
+        Xr = model_rebuild._X
+
+        for (i, j, s) in Xr.keys():
+            varname = f"X[{i},{j},{s}]"
+            if varname in omega_R and i not in I_R and j not in I_R:
+                Xr[i, j, s].lb = Xr[i, j, s].ub = omega_R[varname]
+
+        model_results_new, X_new, Y_new = solve_model(model_rebuild)
+
+        omega_new = {}
+        for (i, j, s), var in X.items():
+            omega_new[f"X[{i},{j},{s}]"] = var.X
+        omega_new_obj = model_results_new["ObjVal"]
+
+        if omega_new_obj < omega_best_obj:
+            omega_best = omega_new
+            omega_best_obj = omega_new_obj
+            model_results_best = model_results_new
+            no_improve = 0
+        else:
+            no_improve += 1
+        
+    end = time.time()
+    model_results_best['RuntimeTotal'] = end - start
+
+    
+    return omega_best, omega_best_obj, model_results_best
+
+
+def ils_matheuristic(I, I0, S, Q, q, L, t, c, r, ITERMAX=50, MAXNOIMPROVE=10,
+                     m_remove=5, alpha=1.5, timelimit=15):
+    
+    start = time.time()
+
+    model = build_model(I, I0, S, Q, q, L, t, c, r,
+                        use_vi1=False, use_vi2=False, use_vi3=False, use_vi4=False,
+                        timelimit=timelimit)
+    model_results, X, Y = solve_model(model)
+
+    omega_best = {}
+    for (i, j, s), var in X.items():
+        omega_best[f"X[{i},{j},{s}]"] = var.X
+    omega_best_obj = model_results['ObjVal']
+    model_results_best = model_results
+    no_improve = 0
+
+    for iter in range(ITERMAX):
+        if no_improve >= MAXNOIMPROVE:
             break
-        j = random.choice(candidates)
-        IR.add(j)
-    # Step 7-11: Add close ports
-    for i in IR.copy():
-        for j in I - IR:
-            if t[i][j] <= rho[i]:
-                IR.add(j)
-    # Rimuovi solo archi uscenti da IR
-    OmegaR = set([arc for arc in OmegaR if arc[0] not in IR])
-    Omega_new = solve_overconstrained(data, build_model, fixed_arcs=OmegaR)
-    return Omega_new
 
-# =========================
-# ALGORITHM 1: LNS Matheuristic
-# =========================
-def lns_matheuristic(data, build_model, params, algo_type='DIV'):
-    ITERMAX = params.get('ITERMAX', 100)
-    MAXNOIMPROVE = params.get('MAXNOIMPROVE', 20)
-    m_pert = params.get('m_pert', 3)
-    ports = [p['id'] for p in data[1]]  # ports from read_instance
-    t = {}  # build t[i][j] from data[2]
-    for (i, j), v in data[2].items():
-        if i not in t:
-            t[i] = {}
-        t[i][j] = v
-    rho = {p: 9999 for p in ports}  # puoi settare valori diversi se vuoi
+        omega_new, omega_new_obj, model_results_new = local_search_ls(I, I0, S, Q, q, L, t, c, r,
+                                                   omega_best, m_remove, alpha, timelimit)
 
-    iter = 1
-    NOIMPROVE = 0
-    best_solution = initial_solution(data, build_model)
-    solution = best_solution
-    best_cost = solution['cost']
-
-    while iter <= ITERMAX and NOIMPROVE <= MAXNOIMPROVE:
-        if algo_type == 'DIV':
-            Omega_new = diversification_DIV(solution, ports, t, rho, m_pert, build_model, data)
-        elif algo_type == 'INT':
-            Omega_new = intensification_INT(solution, ports, t, rho, m_pert, build_model, data)
-        elif algo_type == 'REC':
-            Omega_new = reconstruction_REC(solution, ports, t, rho, m_pert, build_model, data)
+        if omega_new_obj < omega_best_obj:
+            omega_best, omega_best_obj = omega_new, omega_new_obj
+            model_results_best = model_results_new
+            no_improve = 0
         else:
-            raise ValueError("algo_type deve essere 'DIV', 'INT' o 'REC'")
-        if Omega_new['cost'] < best_cost:
-            best_solution = Omega_new
-            best_cost = Omega_new['cost']
-            NOIMPROVE = 0
-        else:
-            NOIMPROVE += 1
-        solution = Omega_new
-        iter += 1
-    return best_solution
+            omega_new, omega_new_obj, model_results_new = diversification_div(I, I0, S, Q, q, L, t, c, r,
+                                                           omega_best, m_remove, alpha, timelimit)
+            no_improve += 1
+    
+    end = time.time()
+    model_results_best['RuntimeTotal'] = end - start
+
+    return omega_best, omega_best_obj, model_results_best
+
+
+def local_search_ls(I, I0, S,Q, q, L, t, c, r, omega_current, m_remove=5, alpha=1.5, timelimit=15):
+
+    lambdas = []
+    for i in I:
+        lambda_i = max(max(t[i]), max(row[i] for row in t))  
+        lambdas.append((i, lambda_i)) 
+
+    lambdas.sort(key=lambda x: x[1], reverse=True)
+    I_R = {i for i, _ in lambdas[:m_remove]}
+
+    for i in list(I_R):
+        nu_i = min(t[i][j] for j in I if j != i)
+        rho_i = alpha * nu_i
+        for j in I:
+            if j not in I_R and t[i][j] <= rho_i:
+                I_R.add(j)
+
+    model_rebuild = build_model(I, I0, S, Q, q, L, t, c, r,
+                                use_vi1=False, use_vi2=False, use_vi3=False, use_vi4=False,
+                                timelimit=timelimit)
+    Xr = model_rebuild._X
+
+    omega_best_arcs = {
+        (i, j, s)
+        for (i, j, s) in Xr.keys()
+        if f"X[{i},{j},{s}]" in omega_current and omega_current[f"X[{i},{j},{s}]"] > 0.5
+    }
+
+    omega_R = {(i, j, s) for (i, j, s) in omega_best_arcs if i not in I_R and j not in I_R}
+
+    for (i, j, s) in omega_R:
+        Xr[i, j, s].lb = Xr[i, j, s].ub = 1.0
+
+    model_results, X, Y = solve_model(model_rebuild)
+
+    omega_new = {}
+    for (i, j, s), var in X.items():
+        omega_new[f"X[{i},{j},{s}]"] = var.X
+    omega_new_obj = model_results['ObjVal']
+    model_results_new = model_results
+    
+    return omega_new, omega_new_obj, model_results_new
+
+
+def diversification_div(I, I0, S, Q, q, L, t, c, r, omega_best, m_remove, alpha, timelimit):
+
+    I_R = set(random.sample(list(I), m_remove))
+
+    for i in list(I_R):
+        nu_i = min(t[i][j] for j in I if j != i)
+        rho_i = alpha * nu_i
+        for j in I:
+            if j not in I_R and t[i][j] <= rho_i:
+                I_R.add(j)
+
+    model_rebuild = build_model(I, I0, S, Q, q, L, t, c, r,
+                                use_vi1=False, use_vi2=False, use_vi3=False, use_vi4=False,
+                                timelimit=timelimit)
+    Xr = model_rebuild._X
+
+    omega_best_arcs = {
+        (i, j, s)
+        for (i, j, s) in Xr.keys()
+        if f"X[{i},{j},{s}]" in omega_best and omega_best[f"X[{i},{j},{s}]"] > 0.5
+    }
+
+    omega_R = {(i, j, s) for (i, j, s) in omega_best_arcs if i not in I_R and j not in I_R}
+
+    for (i, j, s) in omega_R:
+        Xr[i, j, s].lb = Xr[i, j, s].ub = 1.0
+
+    model_results, X, Y = solve_model(model_rebuild)
+
+    omega_new = {}
+    for (i, j, s), var in X.items():
+        omega_new[f"X[{i},{j},{s}]"] = var.X
+    omega_new_obj = model_results['ObjVal']
+    model_results_new = model_results
+    return omega_new, omega_new_obj, model_results_new
