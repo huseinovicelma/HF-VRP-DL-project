@@ -8,7 +8,7 @@ import time
 
 env = create_env(
     logfile=None,   
-    output_flag=False,                
+    output_flag=False,                        
     mip_gap=0.01,               
     presolve=-1            
 )
@@ -39,14 +39,11 @@ def build_model(I, I0, S, Q, q, L, t, c, r, use_vi1=False, use_vi2=False, use_vi
     for s in S:
         model.addConstr(gp.quicksum(q[i] * Y[i, s] for i in I) <= Q[s])
 
-    for j in I:
-        for s in S:
-            model.addConstr(gp.quicksum(X[i, j, s] for i in I0 if i != j) ==
-                            gp.quicksum(X[j, k, s] for k in I0 if k != j))
-            
-    for j in I:
-        for s in S:
-            model.addConstr(gp.quicksum(X[i, j, s] for i in I0 if i != j) == Y[j, s])
+ 
+    model.addConstr(gp.quicksum(X[i, j, s] for i in I0 if i != j) ==
+                    gp.quicksum(X[j, k, s] for k in I0 if k != j) for j in I for s in S)
+    
+    model.addConstr(gp.quicksum(X[i, j, s] for i in I0 if i != j) == Y[j, s] for j in I for s in S)
 
     for s in S:
         model.addConstr(
@@ -60,10 +57,10 @@ def build_model(I, I0, S, Q, q, L, t, c, r, use_vi1=False, use_vi2=False, use_vi
         for j in I:
             if i != j:
                 for s in S:
-                    model.addConstr(u[j] >= u[i] + 1 - Imax * (1 - X[i, j, s]))
-    
+                    model.addConstr(u[j] >= u[i] + 1 - Imax * (1 - gp.quicksum(X[i, j, s])))
+
     for i in I:
-        for j in I:
+        for j in I0:
             for s in S:
                 model.addConstr(l[j, s] >= l[i, s] - q[i] - Q[s] * (1 - X[i, j, s]))
     
@@ -73,6 +70,9 @@ def build_model(I, I0, S, Q, q, L, t, c, r, use_vi1=False, use_vi2=False, use_vi
     
     for s in S:
         model.addConstr(p[s] == gp.quicksum(q[i] * Y[i, s] for i in I))
+    
+    for s in S:
+        model.addConstr(l[0, s] == p[s])
 
     TOTq  = sum(q[1:])  
     q_big = max(q[1:])     
