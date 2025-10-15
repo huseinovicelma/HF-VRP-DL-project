@@ -8,10 +8,9 @@ import time
 
 env = create_env(
     logfile=None,   
-    output_flag=False,          
-    threads=2,                  
+    output_flag=False,                
     mip_gap=0.01,               
-    presolve=0            
+    presolve=-1            
 )
 
 
