@@ -28,7 +28,7 @@ def build_model(I, I0, S, Q, q, L, t, c, r, use_vi1=False, use_vi2=False, use_vi
     p = model.addVars(S, vtype=GRB.CONTINUOUS, name="p")
 
     model.setObjective(
-        gp.quicksum(c[s] * t[i][j] * X[i, j, s] for i in I0 for j in I0 for s in S) +
+        gp.quicksum(c[s] * t[i][j] * X[i, j, s] for i in I0 for j in I0 for s in S if i != j) +
         gp.quicksum(r[i-1][s] * Y[i, s] for i in I for s in S),
         GRB.MINIMIZE
     )
@@ -64,7 +64,8 @@ def build_model(I, I0, S, Q, q, L, t, c, r, use_vi1=False, use_vi2=False, use_vi
     for i in I:
         for j in I0:
             for s in S:
-                model.addConstr(l[j, s] >= l[i, s] - q[i] - Q[s] * (1 - X[i, j, s]))
+                if i != j:
+                    model.addConstr(l[j, s] >= l[i, s] - q[i] - Q[s] * (1 - X[i, j, s]))
     
     for i in I:
         for s in S:
