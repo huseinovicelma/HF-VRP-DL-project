@@ -4,7 +4,7 @@ from src.utils import save_stats, get_parameters, configs
 from src.model import solutions
 from src.heuristics import lns_matheuristic, ils_matheuristic
 
-folder_path = "dataset/r_15_30_30_30"
+folder_path = "dataset/r_50"
 
 def run_all(dataset_dir, configs, output_csv):
     with open(output_csv, mode="a", newline="") as f:
