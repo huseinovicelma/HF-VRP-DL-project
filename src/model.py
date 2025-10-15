@@ -21,7 +21,7 @@ def build_model(I, I0, S, Q, q, L, t, c, r, use_vi1=False, use_vi2=False, use_vi
 
     model = gp.Model("ShipRouting", env=env)
 
-    X = model.addVars(I0, I0, S, vtype=GRB.BINARY, name="X")
+    X = model.addVars(((i, j, s) for i in I0 for j in I0 for s in S if i != j), vtype=GRB.BINARY, name="X")
     Y = model.addVars(I0, S, vtype=GRB.BINARY, name="Y")
     u = model.addVars(I, vtype=GRB.INTEGER, name="u")
     l = model.addVars(I0, S, vtype=GRB.CONTINUOUS, name="l")
