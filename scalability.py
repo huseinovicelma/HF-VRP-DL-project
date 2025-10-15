@@ -37,7 +37,7 @@ def run_all(dataset_dir, configs, output_csv):
 
 
 def run_one_folder(folder_path):
-    with open("results/results_1.csv", mode="a", newline="") as f:
+    with open("results/results_2.csv", mode="a", newline="") as f:
         writer = None
         for filename in sorted(os.listdir(folder_path)):
             if filename.startswith("r_") and filename.endswith(".txt"):

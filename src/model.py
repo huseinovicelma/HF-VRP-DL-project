@@ -72,8 +72,6 @@ def build_model(I, I0, S, Q, q, L, t, c, r, use_vi1=False, use_vi2=False, use_vi
     
     for s in S:
         model.addConstr(p[s] == gp.quicksum(q[i] * Y[i, s] for i in I))
-    
-    for s in S:
         model.addConstr(l[0, s] == p[s])
 
     TOTq  = sum(q[1:])  
