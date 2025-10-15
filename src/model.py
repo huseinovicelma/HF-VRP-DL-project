@@ -39,11 +39,14 @@ def build_model(I, I0, S, Q, q, L, t, c, r, use_vi1=False, use_vi2=False, use_vi
     for s in S:
         model.addConstr(gp.quicksum(q[i] * Y[i, s] for i in I) <= Q[s])
 
- 
-    model.addConstr(gp.quicksum(X[i, j, s] for i in I0 if i != j) ==
-                    gp.quicksum(X[j, k, s] for k in I0 if k != j) for j in I for s in S)
-    
-    model.addConstr(gp.quicksum(X[i, j, s] for i in I0 if i != j) == Y[j, s] for j in I for s in S)
+    for j in I:
+        for s in S:
+            model.addConstr(gp.quicksum(X[i, j, s] for i in I0 if i != j) ==
+                            gp.quicksum(X[j, k, s] for k in I0 if k != j))
+            
+    for j in I:
+        for s in S:
+            model.addConstr(gp.quicksum(X[i, j, s] for i in I0 if i != j) == Y[j, s])
 
     for s in S:
         model.addConstr(
@@ -56,8 +59,7 @@ def build_model(I, I0, S, Q, q, L, t, c, r, use_vi1=False, use_vi2=False, use_vi
     for i in I:
         for j in I:
             if i != j:
-                for s in S:
-                    model.addConstr(u[j] >= u[i] + 1 - Imax * (1 - gp.quicksum(X[i, j, s])))
+                model.addConstr(u[j] >= u[i] + 1 - Imax * (1 - gp.quicksum(X[i, j, s] for s in S)))
 
     for i in I:
         for j in I0:
