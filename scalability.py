@@ -4,7 +4,7 @@ from src.utils import save_stats, get_parameters, configs
 from src.model import solutions
 from src.heuristics import lns_matheuristic, ils_matheuristic
 
-folder_path = "dataset/r_15_30_30_30"
+folder_path = "dataset/r_15_70_30_30"
 
 def run_all(dataset_dir, configs, output_csv):
     with open(output_csv, mode="a", newline="") as f:
@@ -37,7 +37,7 @@ def run_all(dataset_dir, configs, output_csv):
 
 
 def run_one_folder(folder_path):
-    with open("results/results_2.csv", mode="a", newline="") as f:
+    with open("results/results_1.csv", mode="a", newline="") as f:
         writer = None
         for filename in sorted(os.listdir(folder_path)):
             if filename.startswith("r_") and filename.endswith(".txt"):
