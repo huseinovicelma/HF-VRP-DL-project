@@ -1,8 +1,5 @@
 import random
-import copy
 import time
-import gurobipy as gp
-from gurobipy import GRB
 from src.model import build_model, solve_model
 import time
 
@@ -50,8 +47,11 @@ def lns_matheuristic(I, I0, S, Q, q, L, t, c, r, ITERMAX=50, MAXNOIMPROVE=10, m_
 
         model_results_new, X_new, Y_new = solve_model(model_rebuild)
 
+        if X_new is None:
+            continue
+            
         omega_new = {}
-        for (i, j, s), var in X.items():
+        for (i, j, s), var in X_new.items():
             omega_new[f"X[{i},{j},{s}]"] = var.X
         omega_new_obj = model_results_new["ObjVal"]
 
@@ -86,22 +86,32 @@ def ils_matheuristic(I, I0, S, Q, q, L, t, c, r, ITERMAX=50, MAXNOIMPROVE=10,
     omega_best_obj = model_results['ObjVal']
     model_results_best = model_results
     no_improve = 0
+    
+    omega_new = omega_best.copy()
+    omega_new_obj = omega_best_obj
 
     for iter in range(ITERMAX):
         if no_improve >= MAXNOIMPROVE:
             break
 
         omega_new, omega_new_obj, model_results_new = local_search_ls(I, I0, S, Q, q, L, t, c, r,
-                                                   omega_best, m_remove, alpha, timelimit)
+                                                   omega_new, m_remove, alpha, timelimit)
 
         if omega_new_obj < omega_best_obj:
             omega_best, omega_best_obj = omega_new, omega_new_obj
             model_results_best = model_results_new
             no_improve = 0
         else:
+
             omega_new, omega_new_obj, model_results_new = diversification_div(I, I0, S, Q, q, L, t, c, r,
                                                            omega_best, m_remove, alpha, timelimit)
-            no_improve += 1
+            
+            if omega_new_obj < omega_best_obj:
+                omega_best, omega_best_obj = omega_new, omega_new_obj
+                model_results_best = model_results_new
+                no_improve = 0
+            else:
+                no_improve += 1
     
     end = time.time()
     model_results_best['RuntimeTotal'] = end - start
@@ -142,10 +152,10 @@ def local_search_ls(I, I0, S,Q, q, L, t, c, r, omega_current, m_remove=5, alpha=
     for (i, j, s) in omega_R:
         Xr[i, j, s].lb = Xr[i, j, s].ub = 1.0
 
-    model_results, X, Y = solve_model(model_rebuild)
+    model_results, X_new, Y_new = solve_model(model_rebuild)
 
     omega_new = {}
-    for (i, j, s), var in X.items():
+    for (i, j, s), var in X_new.items():
         omega_new[f"X[{i},{j},{s}]"] = var.X
     omega_new_obj = model_results['ObjVal']
     model_results_new = model_results
@@ -155,11 +165,11 @@ def local_search_ls(I, I0, S,Q, q, L, t, c, r, omega_current, m_remove=5, alpha=
 
 def diversification_div(I, I0, S, Q, q, L, t, c, r, omega_best, m_remove, alpha, timelimit):
 
-    I_R = set(random.sample(list(I), m_remove))
-
+    I_R = set(random.sample(I, m_remove))
+    
     for i in list(I_R):
         nu_i = min(t[i][j] for j in I if j != i)
-        rho_i = alpha * nu_i
+        rho_i = alpha * nu_i  
         for j in I:
             if j not in I_R and t[i][j] <= rho_i:
                 I_R.add(j)
@@ -176,15 +186,17 @@ def diversification_div(I, I0, S, Q, q, L, t, c, r, omega_best, m_remove, alpha,
     }
 
     omega_R = {(i, j, s) for (i, j, s) in omega_best_arcs if i not in I_R and j not in I_R}
+    
 
     for (i, j, s) in omega_R:
         Xr[i, j, s].lb = Xr[i, j, s].ub = 1.0
 
-    model_results, X, Y = solve_model(model_rebuild)
+    model_results, X_new, Y_new = solve_model(model_rebuild)
 
     omega_new = {}
-    for (i, j, s), var in X.items():
+    for (i, j, s), var in X_new.items():
         omega_new[f"X[{i},{j},{s}]"] = var.X
     omega_new_obj = model_results['ObjVal']
     model_results_new = model_results
+    
     return omega_new, omega_new_obj, model_results_new
