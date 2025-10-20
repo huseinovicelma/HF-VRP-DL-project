@@ -14,7 +14,7 @@ Questo progetto implementa il problema di ottimizzazione HF-VRP-DL (Heterogeneou
   - `utils.py`: Funzioni di utilità
   - `heuristics.py`: Implementazione di euristiche
   - `valid_inequalities.py`: Disuguaglianze valide per migliorare il modello
-- **references/**: Contiene il paper di riferimento (HF-VRP-DL.pdf)
+- **documents/**: Contiene il paper di riferimento (HF-VRP-DL.pdf)
 - **results/**: Contiene i risultati delle esecuzioni
 - **test.py**: Script per testare il modello
 - **scalability.py**: Script per analizzare la scalabilità del modello
