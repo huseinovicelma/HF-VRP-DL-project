@@ -1,6 +1,5 @@
 import gurobipy as gp
 from gurobipy import GRB 
-from src.parse import parse_instance
 from src.utils import extract_model_stats
 from src.valid_inequalities import valid_inequality_1, valid_inequality_2, valid_inequality_3, valid_inequality_4
 from src.env_utils import create_env
@@ -10,8 +9,8 @@ env = create_env(
     logfile=None,   
     output_flag=False,                        
     mip_gap=0.01,               
-    presolve=-1            
-)
+    presolve=-1,         
+    )
 
 
 def build_model(I, I0, S, Q, q, L, t, c, r, use_vi1=False, use_vi2=False, use_vi3=False, use_vi4=False, timelimit=600):
