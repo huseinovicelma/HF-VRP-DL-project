@@ -7,7 +7,7 @@ def lns_matheuristic(I, I0, S, Q, q, L, t, c, r, ITERMAX=50, MAXNOIMPROVE=10, m_
 
     start = time.time()
 
-    model = build_model(I, I0, S, Q, q, L, t, c, r, use_vi1=False, use_vi2=False, use_vi3=False, use_vi4=False, timelimit=15)
+    model = build_model(I, I0, S, Q, q, L, t, c, r, use_vi1=False, use_vi2=False, use_vi3=False, use_vi4=False, timelimit=timelimit)
 
     model_results, X, Y = solve_model(model)
 
@@ -16,6 +16,7 @@ def lns_matheuristic(I, I0, S, Q, q, L, t, c, r, ITERMAX=50, MAXNOIMPROVE=10, m_
         omega_best[f"X[{i},{j},{s}]"] = var.X
     omega_best_obj = model_results['ObjVal']
     model_results_best = model_results
+    first_best_timestamp = None
     no_improve = 0
 
     for iter in range(ITERMAX):
@@ -59,12 +60,17 @@ def lns_matheuristic(I, I0, S, Q, q, L, t, c, r, ITERMAX=50, MAXNOIMPROVE=10, m_
             omega_best = omega_new
             omega_best_obj = omega_new_obj
             model_results_best = model_results_new
+            first_best_timestamp = time.time()
             no_improve = 0
         else:
             no_improve += 1
         
     end = time.time()
     model_results_best['RuntimeTotal'] = end - start
+    if first_best_timestamp is not None:
+        model_results_best['TimeToBest'] = first_best_timestamp - start
+    else:
+        model_results_best['TimeToBest'] = 0.0
 
     
     return omega_best, omega_best_obj, model_results_best
@@ -85,6 +91,7 @@ def ils_matheuristic(I, I0, S, Q, q, L, t, c, r, ITERMAX=50, MAXNOIMPROVE=10,
         omega_best[f"X[{i},{j},{s}]"] = var.X
     omega_best_obj = model_results['ObjVal']
     model_results_best = model_results
+    first_best_timestamp = None
     no_improve = 0
     
     omega_new = omega_best.copy()
@@ -100,6 +107,7 @@ def ils_matheuristic(I, I0, S, Q, q, L, t, c, r, ITERMAX=50, MAXNOIMPROVE=10,
         if omega_new_obj < omega_best_obj:
             omega_best, omega_best_obj = omega_new, omega_new_obj
             model_results_best = model_results_new
+            first_best_timestamp = time.time()
             no_improve = 0
         else:
 
@@ -109,12 +117,17 @@ def ils_matheuristic(I, I0, S, Q, q, L, t, c, r, ITERMAX=50, MAXNOIMPROVE=10,
             if omega_new_obj < omega_best_obj:
                 omega_best, omega_best_obj = omega_new, omega_new_obj
                 model_results_best = model_results_new
+                first_best_timestamp = time.time()
                 no_improve = 0
             else:
                 no_improve += 1
     
     end = time.time()
     model_results_best['RuntimeTotal'] = end - start
+    if first_best_timestamp is not None:
+        model_results_best['TimeToBest'] = first_best_timestamp - start
+    else:
+        model_results_best['TimeToBest'] = 0.0
 
     return omega_best, omega_best_obj, model_results_best
 
